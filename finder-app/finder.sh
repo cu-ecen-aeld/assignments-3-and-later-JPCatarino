@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Author: Jorge Catarino
 
 # Check if both arguments were passed
