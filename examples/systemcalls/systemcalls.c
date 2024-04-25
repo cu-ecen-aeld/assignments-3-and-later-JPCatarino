@@ -1,4 +1,7 @@
+// # Author: Jorge Catarino
+
 #include "systemcalls.h"
+#include <sys/fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,6 +19,12 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int ret;
+
+    ret = system(cmd);
+
+    if (ret == -1)
+        return false;
 
     return true;
 }
@@ -44,22 +53,29 @@ bool do_exec(int count, ...)
     {
         command[i] = va_arg(args, char *);
     }
-    command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
-
     va_end(args);
+    
+    command[count] = NULL;
+
+    int status_code;
+    pid_t pid;
+    
+    pid = fork(); 
+    if (pid == -1) {
+        return false;
+    }
+    else if (pid == 0) {
+        execv(command[0], command);
+        exit(EXIT_FAILURE);
+    }
+
+    if (waitpid(pid, &status_code, 0) == -1)
+        return false;
+    else if (WIFEXITED(status_code)){
+         if (WEXITSTATUS(status_code) != 0) {
+                return false; 
+            }
+    }
 
     return true;
 }
@@ -79,21 +95,44 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     {
         command[i] = va_arg(args, char *);
     }
-    command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
 
     va_end(args);
+    command[count] = NULL;
 
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd == -1) {
+        return false;
+    }
+
+    int status_code;
+    pid_t pid;
+    
+    pid = fork(); 
+    if (pid == -1) {
+        close(fd);
+        return false;
+    }
+    else if (pid == 0) {
+        if (dup2(fd, 1) < 0) {
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+        execv(command[0], command);
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    if (waitpid(pid, &status_code, 0) == -1){
+        close(fd);
+        return false;
+    }
+    else if (WIFEXITED(status_code)){
+         if (WEXITSTATUS(status_code) != 0) {
+                close(fd);
+                return false; 
+            }
+    }
+
+    close(fd);
     return true;
 }
