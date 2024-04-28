@@ -1,10 +1,10 @@
-CC := $(if $(CROSS_COMPILE),$(CROSS_COMPILE)gcc,gcc)
-CFLAGS := -g -Wall 
-LDFLAGS := -pthread 
+CC ?= $(if $(CROSS_COMPILE),$(CROSS_COMPILE)gcc,gcc)
+CFLAGS ?= -g -Wall 
+LDFLAGS ?= -pthread 
 
-SRC := aesdsocket.c 
-TARGET := aesdsocket 
-OBJS := $(SRC:.c=.o)
+SRC ?= aesdsocket.c 
+TARGET ?= aesdsocket 
+OBJS ?= $(SRC:.c=.o)
 
 all: $(TARGET)
 
