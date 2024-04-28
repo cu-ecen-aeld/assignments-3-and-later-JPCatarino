@@ -1,5 +1,6 @@
 CC := $(if $(CROSS_COMPILE),$(CROSS_COMPILE)gcc,gcc)
-CFLAGS := -g -Wall
+CFLAGS := -g -Wall 
+LDFLAGS := -pthread 
 
 SRC := aesdsocket.c 
 TARGET := aesdsocket 

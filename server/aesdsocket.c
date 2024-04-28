@@ -2,8 +2,40 @@
 
 #include "aesdsocket.h"
 #include <getopt.h>
+#include <sys/time.h>
 
 int close_server = 0;
+pthread_mutex_t mutex;
+
+void print_timestamp(int signum){
+    int ret;
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+
+    char timestamp[64]; 
+
+    strftime(timestamp, sizeof(timestamp), "%a, %d %b %Y %H:%M:%S %z", tm_info);
+    ret = pthread_mutex_lock(&mutex);
+    if (ret != 0) {
+        syslog(LOG_ERR, "lock failed with err %d", ret);
+        return;
+    }
+
+    FILE *file = fopen(DATA_FILE, "a");
+    if (!file) {
+        syslog(LOG_ERR, "Failed to open data file");
+        return;
+    }
+
+    fprintf(file, "timestamp:%s\n", timestamp);
+
+    fclose(file);
+    ret = pthread_mutex_unlock(&mutex);
+    if (ret != 0) {
+        syslog(LOG_ERR, "unlock failed with err %d", ret);
+        return;
+    }
+}
 
 void signal_handler(int signum) {
     syslog(LOG_INFO, "Caught signal, exiting");
@@ -66,10 +98,33 @@ int create_bind_socket() {
     return sockfd;
 }
 
+void* handle_thread(void* thread_param){
+    struct thread_data* thread_func_args = (struct thread_data *) thread_param;
+
+    write_to_file(thread_func_args->connfd, thread_func_args->mutex);
+
+    close(thread_func_args->connfd);
+    syslog(LOG_INFO, "Closed connection from %s\n", thread_func_args->connaddr);
+    thread_func_args->complete = 1;
+
+    return thread_func_args;
+}
+
 void handle_connection(int sockfd){
+    int ret;
     struct sockaddr conn_addr;
     socklen_t conn_len = sizeof(conn_addr);
     int connfd;
+    
+    thread_data_t* threadp = NULL;
+    thread_data_t* temp = NULL;
+    SLIST_HEAD(slisthead,thread_data) head;
+    SLIST_INIT(&head);
+
+    if (pthread_mutex_init(&mutex, NULL) != 0) { 
+        syslog(LOG_ERR, "couldnt start mutex"); 
+        return; 
+    } 
 
     while (!close_server) {
         connfd = accept(sockfd, &conn_addr, &conn_len);
@@ -96,18 +151,81 @@ void handle_connection(int sockfd){
 
         syslog(LOG_INFO, "Accepted connection from %s\n", s);
 
-        write_to_file(connfd);
+        threadp = (struct thread_data *)malloc(sizeof(struct thread_data));
+        threadp->connfd = connfd;
+        threadp->mutex = &mutex;
+        threadp->connaddr = s;
+        threadp->complete = 0;									
 
-        close(connfd);
-        syslog(LOG_INFO, "Closed connection from %s\n", s);
+        ret = pthread_create(&threadp->thread_id, NULL, handle_thread, threadp);
+        if (ret != 0) { 
+            syslog(LOG_ERR, "couldnt create a new thread");
+            free(threadp);
+            return;
+        }
+        
+        ret = pthread_mutex_lock(&mutex);
+        if (ret != 0) {
+            syslog(LOG_ERR, "lock failed with err %d", ret);
+            return;
+        }
+
+        SLIST_INSERT_HEAD(&head, threadp, entries);
+
+        ret = pthread_mutex_unlock(&mutex);
+        if (ret != 0) {
+            syslog(LOG_ERR, "unlock failed with err %d", ret);
+            return;
+        }
+
+        SLIST_FOREACH_SAFE(threadp, &head, entries, temp){
+			if(threadp->complete){
+				pthread_join(threadp->thread_id,NULL);//Cleanup of thread
+                SLIST_REMOVE(&head, threadp, thread_data, entries);
+                free(threadp);
+			}
+		}  
     }
+
+    SLIST_FOREACH_SAFE(threadp, &head, entries, temp) {
+        pthread_kill(threadp->thread_id,SIGINT);
+        pthread_join(threadp->thread_id,NULL);        
+
+        ret = pthread_mutex_lock(&mutex);
+        if (ret != 0) {
+            syslog(LOG_ERR, "lock failed with err %d", ret);
+            return;
+        }
+
+        // Remove thread from list
+        SLIST_REMOVE(&head, threadp, thread_data, entries);
+
+        ret = pthread_mutex_unlock(&mutex);
+        if (ret != 0) {
+            syslog(LOG_ERR, "unlock failed with err %d", ret);
+            return;
+        }
+
+        // Clean up thread resources
+        free(threadp); 
+    }
+
+    // Destroy mutex
+    pthread_mutex_destroy(&mutex);
 
     terminate(sockfd);
 }
 
-void write_to_file(int connfd) {
+void write_to_file(int connfd, pthread_mutex_t* mutex) {
+    int ret;
     char buffer[1024];
     ssize_t bytes_received;
+
+    ret = pthread_mutex_lock(mutex);
+    if (ret != 0) {
+        syslog(LOG_ERR, "lock failed with err %d", ret);
+        return;
+    }
 
     FILE *data_file = fopen(DATA_FILE, "a");
     if (!data_file) {
@@ -124,12 +242,25 @@ void write_to_file(int connfd) {
 
     fclose(data_file);
 
-    write_file_to_sock(connfd);
+    ret = pthread_mutex_unlock(mutex);
+    if (ret != 0) {
+        syslog(LOG_ERR, "unlock failed with err %d", ret);
+        return;
+    }
+
+    write_file_to_sock(connfd, mutex);
 }
 
-void write_file_to_sock(int connfd) {
+void write_file_to_sock(int connfd, pthread_mutex_t* mutex) {
+    int ret;
     char buffer[1024];
     ssize_t bytes_read;
+
+    ret = pthread_mutex_lock(mutex);
+    if (ret != 0) {
+        syslog(LOG_ERR, "lock failed with err %d", ret);
+        return;
+    }
 
     FILE *data_file = fopen(DATA_FILE, "r");
     if (!data_file) {
@@ -142,9 +273,16 @@ void write_file_to_sock(int connfd) {
     }
 
     fclose(data_file);
+
+    ret = pthread_mutex_unlock(mutex);
+    if (ret != 0) {
+        syslog(LOG_ERR, "unlock failed with err %d", ret);
+        return;
+    }
 }
 
 int main(int argc, char *argv[]) {
+    struct itimerval timer;
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = signal_handler;
@@ -198,6 +336,19 @@ int main(int argc, char *argv[]) {
             syslog(LOG_ERR, "couldnt listen to socket");
             close(sockfd);
             return -1;
+    }
+
+    timer.it_interval.tv_sec = 10;
+    timer.it_interval.tv_usec = 0;
+
+    timer.it_value.tv_sec = 10;
+    timer.it_value.tv_usec = 0;
+
+    signal(SIGALRM, print_timestamp);
+
+    if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
+        syslog(LOG_ERR, "couldnt set timer");
+        return -1;
     }
 
     handle_connection(sockfd);
