@@ -52,7 +52,9 @@ void terminate(int sock_fd) {
         close(sock_fd);
     }
 
+    #if USE_AESD_CHAR_DEVICE == 0
     remove(DATA_FILE);
+    #endif
 
     closelog();
 }
