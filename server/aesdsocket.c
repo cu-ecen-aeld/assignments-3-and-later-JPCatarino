@@ -2,11 +2,15 @@
 
 #include "aesdsocket.h"
 #include <getopt.h>
+
+#if USE_AESD_CHAR_DEVICE == 0
 #include <sys/time.h>
+#endif
 
 int close_server = 0;
 pthread_mutex_t mutex;
 
+#if USE_AESD_CHAR_DEVICE == 0
 void print_timestamp(int signum){
     int ret;
     time_t now = time(NULL);
@@ -36,6 +40,7 @@ void print_timestamp(int signum){
         return;
     }
 }
+#endif
 
 void signal_handler(int signum) {
     syslog(LOG_INFO, "Caught signal, exiting");
@@ -282,7 +287,9 @@ void write_file_to_sock(int connfd, pthread_mutex_t* mutex) {
 }
 
 int main(int argc, char *argv[]) {
+    #if USE_AESD_CHAR_DEVICE == 0
     struct itimerval timer;
+    #endif
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = signal_handler;
@@ -337,7 +344,7 @@ int main(int argc, char *argv[]) {
             close(sockfd);
             return -1;
     }
-
+    #if USE_AESD_CHAR_DEVICE == 0
     timer.it_interval.tv_sec = 10;
     timer.it_interval.tv_usec = 0;
 
@@ -350,6 +357,7 @@ int main(int argc, char *argv[]) {
         syslog(LOG_ERR, "couldnt set timer");
         return -1;
     }
+    #endif
 
     handle_connection(sockfd);
 

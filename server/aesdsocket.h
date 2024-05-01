@@ -15,8 +15,13 @@
 #include "queue.h"
 
 #define PORT "9000"
-#define DATA_FILE "/var/tmp/aesdsocketdata"
 #define BACKLOG 1
+
+#if USE_AESD_CHAR_DEVICE == 1
+    #define DATA_FILE            ("/dev/aesdchar")
+#else
+    #define DATA_FILE            ("/var/tmp/aesdsocketdata")
+#endif
 
 typedef struct thread_data{
     pthread_t thread_id; 

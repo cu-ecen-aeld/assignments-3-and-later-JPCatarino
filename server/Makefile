@@ -6,10 +6,12 @@ SRC ?= aesdsocket.c
 TARGET ?= aesdsocket 
 OBJS ?= $(SRC:.c=.o)
 
+USE_CHAR_DEVICE := -DUSE_AESD_CHAR_DEVICE=1
+
 all: $(TARGET)
 
 $(TARGET) : $(OBJS)
-	$(CC) $(CFLAGS) $(INCLUDES) $(OBJS) -o $(TARGET) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(USE_CHAR_DEVICE) $(INCLUDES) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
 clean:
 	$(RM) $(TARGET) $(OBJS)

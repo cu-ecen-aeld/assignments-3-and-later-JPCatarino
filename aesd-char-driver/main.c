@@ -158,6 +158,7 @@ unlock_out:
     PDEBUG("write retval %ld", retval);
     return retval;
 }
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
