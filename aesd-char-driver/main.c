@@ -227,9 +227,12 @@ long aesd_adjust_file_offset(struct file *filp, unsigned int write_cmd, unsigned
         }
     }
 
+    PDEBUG("After looping off %lld", off);
+
     tmp = &dev->cb.entry[write_cmd];
     if ((tmp->buffptr != NULL && tmp->size > 0) && (write_cmd_offset <= tmp->size)) {
         off += write_cmd_offset;
+        PDEBUG("if valid off %lld", off);
     } 
     else {
         retval = -EINVAL;
