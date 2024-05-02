@@ -188,6 +188,8 @@ loff_t aesd_llseek(struct file *filp, loff_t off, int whence){
         goto unlock_out;
     }
 
+    PDEBUG("curr f_pos %lld new f_pos %lld", filp->f_pos, retval);
+
     filp->f_pos = retval;
 
 unlock_out:
