@@ -9,6 +9,10 @@
 #include <sys/time.h>
 #endif
 
+#if USE_AESD_CHAR_DEVICE == 1
+#include "../aesd-char-driver/aesd_ioctl.h"
+#endif
+
 int close_server = 0;
 pthread_mutex_t mutex;
 
@@ -230,25 +234,51 @@ void write_to_file(int connfd, pthread_mutex_t* mutex) {
     char buffer[1024];
     ssize_t bytes_received;
 
+    while ((bytes_received = recv(connfd, buffer, sizeof(buffer), 0)) > 0) {
+        if (memchr(buffer, '\n', bytes_received) != NULL) {
+            break; 
+        }
+    }
+
+#if USE_AESD_CHAR_DEVICE == 1
+    buffer[bytes_received] = '\0';
+#endif 
+
     ret = pthread_mutex_lock(mutex);
     if (ret != 0) {
         syslog(LOG_ERR, "lock failed with err %d", ret);
         return;
     }
 
-    FILE *data_file = fopen(DATA_FILE, "a");
+    FILE *data_file = fopen(DATA_FILE, "a+");
     if (!data_file) {
         syslog(LOG_ERR, "couldnt open file");
         return;
     }
+#if USE_AESD_CHAR_DEVICE == 1
+    if (strncmp(buffer, "AESDCHAR_IOCSEEKTO:", 19) == 0) {
+        unsigned int write_cmd, offset;
+        struct aesd_seekto arg;
+        memset(&arg, 0, sizeof(arg));
+        sscanf(buffer + 19, "%u,%u", &write_cmd, &offset);
 
-    while ((bytes_received = recv(connfd, buffer, sizeof(buffer), 0)) > 0) {
-        fwrite(buffer, 1, bytes_received, data_file);
-        if (memchr(buffer, '\n', bytes_received) != NULL) {
-            break; 
+        arg.write_cmd = write_cmd;
+        arg.write_cmd_offset = offset;
+
+        if (ioctl(fileno(data_file), AESDCHAR_IOCSEEKTO, &arg) == -1) {
+            fclose(data_file);
+            return;
         }
     }
+    else{
+        fwrite(buffer, 1, bytes_received, data_file);
+    }
+#endif 
 
+#if USE_AESD_CHAR_DEVICE == 0
+    fwrite(buffer, 1, bytes_received, data_file);
+#endif
+    
     fclose(data_file);
 
     ret = pthread_mutex_unlock(mutex);
