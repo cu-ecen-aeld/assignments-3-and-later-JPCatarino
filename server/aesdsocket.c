@@ -273,7 +273,8 @@ void write_to_file(int connfd, pthread_mutex_t* mutex) {
         }
     }
     else{
-        fwrite(buffer, 1, bytes_received, data_file);
+        int str_size = strlen(buffer);
+        fwrite(buffer, sizeof(char), str_size, data_file);
     }
 #endif 
 
