@@ -16,6 +16,7 @@
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/cdev.h>
+#include <linux/slab.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
 int aesd_major =   0; // use dynamic major
@@ -28,11 +29,11 @@ struct aesd_dev aesd_device;
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
-    PDEBUG("open");
-    
     struct aesd_dev *dev;
+    
+    PDEBUG("open");
 
-    dev = containerof(inode->i_cdev, struct aesd_dev, cdev);
+    dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
     filp->private_data = dev;
 
     return 0;
@@ -52,28 +53,30 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     struct aesd_buffer_entry *cmd_entry;
     size_t cmd_offset, chars_read;
     
-    struct aesd_dev *dev = filp->private_data;;
+    struct aesd_dev *dev = filp->private_data;
 
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
-    
-    mutex_lock_interruptible(&dev->lock); 
+
+    if (mutex_lock_interruptible(&dev->lock)) {
+        return -ERESTARTSYS;
+    }
 
     cmd_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->cb, *f_pos, &cmd_offset);
 
-    if (!start_entry) {
+    if (!cmd_entry) {
         PDEBUG("No data to read");
         retval = 0; 
         goto unlock_out;
     }
 
-    chars_read = min(start_entry->size - cmd_offset, count);
+    chars_read = min(cmd_entry->size - cmd_offset, count);
 
     if (chars_read <= 0) {
         retval = 0; 
         goto unlock_out;
     }
 
-    if (copy_to_user(buf, &(start_entry->buffptr[start_entry_off]), chars_read)) {
+    if (copy_to_user(buf, &(cmd_entry->buffptr[cmd_offset]), chars_read)) {
         retval = -EFAULT; 
         goto unlock_out;
     }
@@ -92,6 +95,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     ssize_t retval = -ENOMEM;
     struct aesd_buffer_entry new;
+    char *newline;
     size_t char_to_write;
     
     struct aesd_dev *dev = filp->private_data;
@@ -99,7 +103,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 
-    mutex_lock_interruptible(&dev->lock);
+    if (mutex_lock_interruptible(&dev->lock)) {
+        return -ERESTARTSYS;
+    }
 
     if(!dev->buf){
         dev->buf = kmalloc(count, GFP_KERNEL);
@@ -109,13 +115,13 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             goto unlock_out;
         }
 
-        char_to_write = copy_from_user(dev->buf, buf, count)
+        char_to_write = copy_from_user(dev->buf, buf, count);
 
         retval = count - char_to_write;
         dev->buf_size = retval;
     }
     else{
-        char extend_buf = krealloc(dev->buf, dev->buf_size + count, GFP_KERNEL);
+        char* extend_buf = (char*) krealloc(dev->buf, dev->buf_size + count, GFP_KERNEL);
 
         if (!extend_buf) {
             retval = -ENOMEM;
@@ -132,13 +138,13 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->buf_size += retval;
     }
 
-    char *newline = memchr(dev->buf, '\n', dev->buf_size);
+    newline = memchr(dev->buf, '\n', dev->buf_size);
 
     if(newline){
 
         if (dev->cb.full) {
             uint8_t curr_offset = dev->cb.in_offs;
-            if ((cb.entry[curr_offset].size > 0) && (dev->cb.entry[curr_offset].buffptr != NULL)) {
+            if ((dev->cb.entry[curr_offset].size > 0) && (dev->cb.entry[curr_offset].buffptr != NULL)) {
                 kfree(dev->cb.entry[curr_offset].buffptr);
                 dev->cb.entry[curr_offset].size = 0;
             }
@@ -213,14 +219,19 @@ int aesd_init_module(void)
 
 void aesd_cleanup_module(void)
 {
+    struct aesd_buffer_entry *tmp;
+    struct aesd_circular_buffer *buffer = &aesd_device.cb;
+    uint8_t index;
+    
     dev_t devno = MKDEV(aesd_major, aesd_minor);
+    
 
     cdev_del(&aesd_device.cdev);
 
-    AESD_CIRCULAR_BUFFER_FOREACH(entry, buffer, index) {
-        if ((entry->size > 0) && (entry->buffptr != NULL)) {
-            kfree(entry->buffptr);
-            entry->size = 0;
+    AESD_CIRCULAR_BUFFER_FOREACH(tmp, buffer, index) {
+        if ((tmp->size > 0) && (tmp->buffptr != NULL)) {
+            kfree(tmp->buffptr);
+            tmp->size = 0;
         }
     }
     mutex_destroy(&aesd_device.lock);
