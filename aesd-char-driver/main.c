@@ -95,7 +95,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     struct aesd_buffer_entry new;
     char *newline;
-    size_t char_to_write;
+    size_t char_to_write = 0;
     ssize_t retval = -ENOMEM;
     
     struct aesd_dev *dev = filp->private_data;
@@ -134,7 +134,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
         memset(&dev->buf[dev->buf_size], 0, count);
 
-        char_to_write = copy_from_user(&dev->buf[dev->buf_size], buf, char_to_write);
+        char_to_write = copy_from_user(&dev->buf+ dev->buf_size, buf, count);
 
         retval = count - char_to_write;
         dev->buf_size += retval;
