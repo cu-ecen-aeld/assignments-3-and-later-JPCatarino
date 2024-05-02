@@ -3,6 +3,8 @@
 #include "aesdsocket.h"
 #include <getopt.h>
 
+#define USE_AESD_CHAR_DEVICE 1
+
 #if USE_AESD_CHAR_DEVICE == 0
 #include <sys/time.h>
 #endif
