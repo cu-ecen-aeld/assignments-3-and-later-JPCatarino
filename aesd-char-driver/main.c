@@ -134,7 +134,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
         memset(&dev->buf[dev->buf_size], 0, count);
 
-        char_to_write = copy_from_user(&dev->tmp_buf[dev->tmp_size], buf, char_to_write);
+        char_to_write = copy_from_user(&dev->buf[dev->buf_size], buf, char_to_write);
 
         retval = count - char_to_write;
         dev->buf_size += retval;
