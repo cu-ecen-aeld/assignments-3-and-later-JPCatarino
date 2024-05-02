@@ -93,10 +93,10 @@ unlock_out:
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-    ssize_t retval = -ENOMEM;
     struct aesd_buffer_entry new;
     char *newline;
     size_t char_to_write;
+    ssize_t retval = -ENOMEM;
     
     struct aesd_dev *dev = filp->private_data;
 
@@ -107,13 +107,15 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         return -ERESTARTSYS;
     }
 
-    if(!dev->buf){
+    if(dev->buf_size <= 0){
         dev->buf = kmalloc(count, GFP_KERNEL);
 
         if (!dev->buf) {
             retval = -ENOMEM;
             goto unlock_out;
         }
+
+        memset(dev->buf, 0, count);
 
         char_to_write = copy_from_user(dev->buf, buf, count);
 
@@ -144,7 +146,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
         if (dev->cb.full) {
             uint8_t curr_offset = dev->cb.in_offs;
-            if ((dev->cb.entry[curr_offset].size > 0) && (dev->cb.entry[curr_offset].buffptr != NULL)) {
+            if (dev->cb.entry[curr_offset].buffptr != NULL) {
                 kfree(dev->cb.entry[curr_offset].buffptr);
                 dev->cb.entry[curr_offset].size = 0;
             }
