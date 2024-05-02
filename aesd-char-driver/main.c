@@ -160,6 +160,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->buf = NULL;
         dev->buf_size = 0;
     }
+    else {
+        PDEBUG("partial write %s with %zu bytes", dev->buf, dev->buf_size);
+    }
 
 unlock_out:
     mutex_unlock(&dev->lock);
