@@ -262,6 +262,8 @@ void write_to_file(int connfd, pthread_mutex_t* mutex) {
         memset(&arg, 0, sizeof(arg));
         sscanf(buffer + 19, "%u,%u", &write_cmd, &offset);
 
+        syslog(LOG_DEBUG, "received command with %u %u", write_cmd, offset);
+
         arg.write_cmd = write_cmd;
         arg.write_cmd_offset = offset;
 
