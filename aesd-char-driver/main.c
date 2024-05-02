@@ -203,8 +203,10 @@ long aesd_adjust_file_offset(struct file *filp, unsigned int write_cmd, unsigned
     struct aesd_buffer_entry *tmp;
     
     int i;
-    loff_t off;
+    loff_t off = 0;
     long retval = 0;
+
+    PDEBUG("write_cmd %u write_cmd_offset %u", write_cmd, write_cmd_offset)
 
     if (write_cmd < 0 || write_cmd > AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED){
         return -EINVAL;
