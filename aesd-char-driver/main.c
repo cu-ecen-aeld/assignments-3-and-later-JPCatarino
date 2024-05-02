@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -164,9 +165,34 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         PDEBUG("partial write %s with %zu bytes", dev->buf, dev->buf_size);
     }
 
+    dev->cb_size += retval;
+
 unlock_out:
     mutex_unlock(&dev->lock);
     PDEBUG("write retval %ld", retval);
+    return retval;
+}
+
+loff_t aesd_llseek(struct file *filp, loff_t off, int whence){
+    struct aesd_dev *dev = filp->private_data;
+    loff_t retval;
+
+    if (mutex_lock_interruptible(&dev->lock)) {
+        return -ERESTARTSYS;
+    }
+
+    retval = fixed_size_llseek(filp, off, whence, dev->cb_size);
+
+    if (retval < 0 || retval > dev->cb_size) {
+        retval = -EINVAL;
+        goto unlock_out;
+    }
+
+    filp->f_pos = retval;
+
+unlock_out:
+    mutex_unlock(&dev->lock);  
+    PDEBUG("seek retval %lld", retval);
     return retval;
 }
 
@@ -174,6 +200,7 @@ struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
     .write =    aesd_write,
+    .llseek =   aesd_llseek,
     .open =     aesd_open,
     .release =  aesd_release,
 };
@@ -210,6 +237,7 @@ int aesd_init_module(void)
     aesd_circular_buffer_init(&aesd_device.cb);
     aesd_device.buf = NULL;
     aesd_device.buf_size = 0;
+    aesd_device.cb_size = 0;
 
     mutex_init(&aesd_device.lock);
 
