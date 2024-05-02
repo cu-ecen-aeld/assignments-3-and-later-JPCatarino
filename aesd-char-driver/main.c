@@ -265,7 +265,7 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
         default:
             retval = -EINVAL;
     }
-
+    PDEBUG("after func fpos %lld", filp->f_pos);
     return retval;
 }
 
