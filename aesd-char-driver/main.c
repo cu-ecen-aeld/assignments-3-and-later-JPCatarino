@@ -107,7 +107,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         return -ERESTARTSYS;
     }
 
-    if(dev->buf_size <= 0){
+    if(!dev->buf){
         dev->buf = kmalloc(count, GFP_KERNEL);
 
         if (!dev->buf) {
@@ -134,7 +134,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
         memset(&dev->buf[dev->buf_size], 0, count);
 
-        char_to_write = copy_from_user(&dev->buf+ dev->buf_size, buf, count);
+        char_to_write = copy_from_user(dev->buf + dev->buf_size, buf, count);
 
         retval = count - char_to_write;
         dev->buf_size += retval;
