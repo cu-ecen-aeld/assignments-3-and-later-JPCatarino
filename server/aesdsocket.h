@@ -16,6 +16,7 @@
 
 #define PORT "9000"
 #define BACKLOG 1
+#define USE_AESD_CHAR_DEVICE 1
 
 #if USE_AESD_CHAR_DEVICE == 1
     #define DATA_FILE            ("/dev/aesdchar")
