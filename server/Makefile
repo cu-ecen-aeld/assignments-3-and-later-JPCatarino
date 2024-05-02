@@ -6,7 +6,7 @@ SRC ?= aesdsocket.c
 TARGET ?= aesdsocket 
 OBJS ?= $(SRC:.c=.o)
 
-USE_CHAR_DEVICE := -DUSE_AESD_CHAR_DEVICE=1
+USE_CHAR_DEVICE = -DUSE_AESD_CHAR_DEVICE=1
 
 all: $(TARGET)
 
