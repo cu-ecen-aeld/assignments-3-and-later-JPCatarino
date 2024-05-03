@@ -231,6 +231,7 @@ void handle_connection(int sockfd){
 
 void write_to_file(int connfd, pthread_mutex_t* mutex) {
     int ret;
+    int cmd = 0;
     char buffer[1024];
     ssize_t bytes_received;
 
@@ -271,6 +272,11 @@ void write_to_file(int connfd, pthread_mutex_t* mutex) {
             fclose(data_file);
             return;
         }
+        ssize_t bytes_read;
+        while ((bytes_read = fread(buffer, 1, sizeof(buffer), data_file)) > 0) {
+            send(connfd, buffer, bytes_read, 0);
+        }
+        cmd = 1;
     }
     else{
         int str_size = strlen(buffer);
@@ -289,8 +295,9 @@ void write_to_file(int connfd, pthread_mutex_t* mutex) {
         syslog(LOG_ERR, "unlock failed with err %d", ret);
         return;
     }
-
-    write_file_to_sock(connfd, mutex);
+    if(!cmd){
+        write_file_to_sock(connfd, mutex);
+    }
 }
 
 void write_file_to_sock(int connfd, pthread_mutex_t* mutex) {
